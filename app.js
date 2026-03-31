@@ -6,29 +6,13 @@
 
 // ─────────────────────────────────────────────────────────────
 //  PROVIDERS
+//  No keys here — all keys live in .env and are read by
+//  server.js only. The browser calls /api/chat exclusively.
 // ─────────────────────────────────────────────────────────────
 const PROVIDERS = {
-  openrouter: {
-    url:  'https://openrouter.ai/api/v1/chat/completions',
-    keys: [
-      'sk-or-v1-YOUR_OPENROUTER_KEY',
-    ],
-    _idx: 0,
-  },
-  groq: {
-    url:  'https://api.groq.com/openai/v1/chat/completions',
-    keys: [
-      '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',
-    ],
-    _idx: 0,
-  },
-  gemini: {
-    url:  'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-    keys: [
-      'AIzaSyDsveUOpFyOhFRHq_AfsNRQbkJasIirZpA',
-    ],
-    _idx: 0,
-  },
+  openrouter: { label: 'OpenRouter' },
+  groq:       { label: 'Groq' },
+  gemini:     { label: 'Google Gemini' },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -347,20 +331,7 @@ function getCurrentModel() {
   return MODELS.find(m => m.value === value) || MODELS[0];
 }
 
-function getKeyAt(providerName, idx) {
-  const p = PROVIDERS[providerName];
-  return p.keys[idx % p.keys.length];
-}
 
-function advanceKey(providerName, idx) {
-  PROVIDERS[providerName]._idx = (idx + 1) % PROVIDERS[providerName].keys.length;
-}
-
-function providerHasKey(providerName) {
-  return PROVIDERS[providerName].keys.some(k =>
-    k && !k.startsWith('YOUR_') && !k.startsWith('sk-or-v1-YOUR') && !k.startsWith('gsk_YOUR')
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 //  MAIN ASK
@@ -375,12 +346,6 @@ async function askQuestion() {
   const modelMeta    = getCurrentModel();
   const providerName = modelMeta.provider;
   const provider     = PROVIDERS[providerName];
-
-  if (!providerHasKey(providerName)) {
-    return showError(
-      `No API key set for ${modelMeta.group.split('—')[0].trim()}. Add your key in app.js under PROVIDERS.${providerName}.keys`
-    );
-  }
 
   // Hide suggestions after first message
   document.getElementById('suggestions-row').style.display = 'none';
@@ -402,81 +367,42 @@ async function askQuestion() {
     ...conversationHistory,
   ];
 
-  // Key rotation
-  const startIdx = provider._idx % provider.keys.length;
-  let attempted  = 0;
-  let success    = false;
-  let lastError  = '';
+  try {
+    // All requests go through our local server — keys never touch the browser
+    const res = await fetch('/api/chat', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        provider:    providerName,
+        model:       modelMeta.value,
+        messages,
+        max_tokens:  700,
+        temperature: 0.75,
+      }),
+    });
 
-  while (attempted < provider.keys.length) {
-    const keyIdx = (startIdx + attempted) % provider.keys.length;
-    attempted++;
+    const data = await res.json();
 
-    const key = getKeyAt(providerName, keyIdx);
-    let url     = provider.url;
-    let headers = { 'Content-Type': 'application/json' };
-
-    if (providerName === 'gemini') {
-      url = provider.url + '?key=' + key;
-    } else {
-      headers['Authorization'] = 'Bearer ' + key;
+    if (!res.ok) {
+      removeSkeleton(aiBubbleId);
+      conversationHistory.pop();
+      showError(data?.error?.message || `Server error ${res.status}`);
+      setLoading(false);
+      return;
     }
-    if (providerName === 'openrouter') {
-      headers['HTTP-Referer'] = window.location.href;
-      headers['X-Title']      = 'NourishAI';
-    }
 
-    try {
-      const res = await fetch(url, {
-        method:  'POST',
-        headers,
-        body:    JSON.stringify({
-          model:       modelMeta.value,
-          messages,
-          max_tokens:  700,
-          temperature: 0.75,
-        }),
-      });
+    const raw     = data?.choices?.[0]?.message?.content || 'No response received.';
+    const usage   = data?.usage;
+    const learned = extractAndSaveMemory(raw);
+    const display = stripMemoryTag(raw);
 
-      const data = await res.json();
+    conversationHistory.push({ role: 'assistant', content: raw });
+    await typeIntoBubble(aiBubbleId, display, usage, providerName, learned);
 
-      if (res.status === 429) {
-        lastError = `Key ${keyIdx + 1} rate-limited, rotating…`;
-        continue;
-      }
-      if (res.status === 401 || res.status === 403) {
-        lastError = `Key ${keyIdx + 1} rejected, rotating…`;
-        continue;
-      }
-      if (!res.ok) {
-        removeSkeleton(aiBubbleId);
-        conversationHistory.pop();
-        showError(data?.error?.message || `API error ${res.status}`);
-        setLoading(false);
-        return;
-      }
-
-      advanceKey(providerName, keyIdx);
-
-      const raw     = data?.choices?.[0]?.message?.content || 'No response received.';
-      const usage   = data?.usage;
-      const learned = extractAndSaveMemory(raw);
-      const display = stripMemoryTag(raw);
-
-      conversationHistory.push({ role: 'assistant', content: raw });
-      await typeIntoBubble(aiBubbleId, display, usage, providerName, keyIdx, learned);
-      success = true;
-      break;
-
-    } catch (err) {
-      lastError = 'Network error: ' + err.message;
-    }
-  }
-
-  if (!success) {
+  } catch (err) {
     removeSkeleton(aiBubbleId);
     conversationHistory.pop();
-    showError(lastError || `All ${providerName} keys exhausted. Try a different model.`);
+    showError('Could not reach server. Is `node server.js` running? (' + err.message + ')');
   }
 
   setLoading(false);
@@ -536,7 +462,7 @@ function renderAISkeleton(id) {
   msgs.appendChild(row);
 }
 
-async function typeIntoBubble(id, raw, usage, providerName, keyIdx, learned) {
+async function typeIntoBubble(id, raw, usage, providerName, learned) {
   const row = document.getElementById(id);
   if (!row) return;
 
@@ -573,7 +499,6 @@ async function typeIntoBubble(id, raw, usage, providerName, keyIdx, learned) {
   const tokens = document.createElement('span');
   tokens.className = 'bubble-tokens';
   if (usage) {
-    const p = PROVIDERS[providerName];
     tokens.textContent =
       `${providerName} · ${usage.prompt_tokens ?? '?'}p + ${usage.completion_tokens ?? '?'}c tokens`;
   }
