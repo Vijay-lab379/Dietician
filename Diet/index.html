@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NourishAI — Your Personal Food & Health Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="grain-overlay"></div>
+
+  <!-- ── Profile Panel (left) ─────────────────────────────── -->
+  <aside class="profile-panel" id="profile-panel">
+    <div class="panel-header">
+      <div class="panel-logo">🌿</div>
+      <h2 class="panel-title">Your Profile</h2>
+      <button class="panel-close" onclick="togglePanel('profile')">✕</button>
+    </div>
+
+    <div class="profile-section">
+      <label class="field-label">Name</label>
+      <input type="text" id="pref-name" class="field-input" placeholder="What shall we call you?" />
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Age</label>
+      <input type="number" id="pref-age" class="field-input" placeholder="Your age" min="1" max="120" />
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Diet Type</label>
+      <div class="toggle-group" id="diet-toggle">
+        <button class="toggle-btn active" data-value="vegetarian"     onclick="setDiet(this)">🥦 Vegetarian</button>
+        <button class="toggle-btn"        data-value="non-vegetarian" onclick="setDiet(this)">🍗 Non-Veg</button>
+        <button class="toggle-btn"        data-value="vegan"          onclick="setDiet(this)">🌱 Vegan</button>
+        <button class="toggle-btn"        data-value="eggetarian"     onclick="setDiet(this)">🥚 Eggetarian</button>
+      </div>
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Region / Cuisine</label>
+      <input type="text" id="pref-region" class="field-input" placeholder="e.g. South Indian, Mediterranean…" />
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Cultural / Religious Restrictions</label>
+      <input type="text" id="pref-culture" class="field-input" placeholder="e.g. No beef, Halal, Jain…" />
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Health Goals</label>
+      <div class="chips-wrap">
+        <button class="chip" data-val="weight-loss"  onclick="toggleChip(this)">⚖️ Weight Loss</button>
+        <button class="chip" data-val="muscle-gain"  onclick="toggleChip(this)">💪 Muscle Gain</button>
+        <button class="chip" data-val="heart-health" onclick="toggleChip(this)">❤️ Heart Health</button>
+        <button class="chip" data-val="diabetes"     onclick="toggleChip(this)">🩺 Diabetes Care</button>
+        <button class="chip" data-val="gut-health"   onclick="toggleChip(this)">🌀 Gut Health</button>
+        <button class="chip" data-val="energy"       onclick="toggleChip(this)">⚡ More Energy</button>
+      </div>
+    </div>
+    <div class="profile-section">
+      <label class="field-label">Known Restrictions / Allergies
+        <span class="field-hint">Also auto-detected from chat</span>
+      </label>
+      <textarea id="pref-restrictions" class="field-textarea" rows="3" placeholder="e.g. lactose intolerant, nut allergy…"></textarea>
+    </div>
+    <div class="profile-section" id="ai-memory-section" style="display:none">
+      <label class="field-label">🧠 AI Detected From Chat
+        <span class="field-hint">Automatically saved preferences</span>
+      </label>
+      <div id="ai-memory-tags" class="memory-tags"></div>
+    </div>
+    <button class="save-btn" onclick="saveProfile()">Save Profile</button>
+    <div class="save-confirm" id="save-confirm">✓ Profile saved!</div>
+  </aside>
+
+  <!-- ── History Panel (right) ────────────────────────────── -->
+  <aside class="history-panel" id="history-panel">
+    <div class="panel-header">
+      <div class="panel-logo">🕐</div>
+      <h2 class="panel-title">Chat History</h2>
+      <button class="panel-close" onclick="togglePanel('history')">✕</button>
+    </div>
+    <div class="history-search-wrap">
+      <input type="text" id="history-search" class="history-search" placeholder="Search chats…" oninput="filterHistory(this.value)" />
+    </div>
+    <div id="history-list" class="history-list">
+      <div class="history-empty">No saved chats yet.<br>Start a conversation!</div>
+    </div>
+  </aside>
+
+  <!-- Overlay -->
+  <div class="panel-overlay" id="panel-overlay" onclick="closeAllPanels()"></div>
+
+  <!-- ── Main App ──────────────────────────────────────────── -->
+  <div class="app-shell">
+
+    <header class="site-header">
+      <button class="profile-trigger" onclick="togglePanel('profile')" title="Your Profile">
+        <span class="avatar-circle" id="avatar-circle">🌿</span>
+        <span class="profile-trigger-label">Profile</span>
+      </button>
+
+      <div class="brand">
+        <h1 class="site-title">Nourish<span class="accent">AI</span></h1>
+        <p class="site-subtitle">Personalised food wisdom, just for you</p>
+      </div>
+
+      <button class="history-trigger" onclick="togglePanel('history')" title="Chat History">
+        <span class="history-trigger-icon">🕐</span>
+        <span class="profile-trigger-label">History</span>
+      </button>
+    </header>
+
+    <!-- Quick suggestions -->
+    <div class="suggestions-row" id="suggestions-row">
+      <button class="suggest-card" onclick="injectPrompt(this)">
+        <span class="suggest-icon">🍽️</span><span>What should I eat for breakfast today?</span>
+      </button>
+      <button class="suggest-card" onclick="injectPrompt(this)">
+        <span class="suggest-icon">🥗</span><span>Give me a weekly meal plan</span>
+      </button>
+      <button class="suggest-card" onclick="injectPrompt(this)">
+        <span class="suggest-icon">📋</span><span>Recipe for a healthy dinner</span>
+      </button>
+      <button class="suggest-card" onclick="injectPrompt(this)">
+        <span class="suggest-icon">⚠️</span><span>Foods to avoid with my conditions</span>
+      </button>
+    </div>
+
+    <!-- Chat window -->
+    <div class="chat-window" id="chat-window">
+      <div class="chat-empty" id="chat-empty">
+        <div class="empty-bowl">🥣</div>
+        <p class="empty-title">Hello! I'm your NourishAI guide.</p>
+        <p class="empty-sub">Tell me your health goals or ask for a recipe — I'll personalise every suggestion to <em>you</em>.</p>
+      </div>
+      <div id="chat-messages"></div>
+    </div>
+
+    <!-- Input area -->
+    <div class="input-area">
+      <!-- Session title (editable) -->
+      <div class="session-title-row" id="session-title-row" style="display:none">
+        <span class="session-title-label">📝</span>
+        <input type="text" id="session-title" class="session-title-input" placeholder="Chat title…" />
+        <button class="save-chat-btn" onclick="saveCurrentChat()" title="Save chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Save
+        </button>
+      </div>
+
+      <div class="input-row">
+        <div class="textarea-wrap">
+          <textarea id="question" rows="2" placeholder="Ask about recipes, nutrition, meal plans…"></textarea>
+        </div>
+        <button class="ask-btn" id="ask-btn" onclick="askQuestion()" title="Send (Enter)">
+          <svg id="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          <svg id="btn-spinner" class="hidden spin-icon" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+            <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="input-meta">
+        <div class="model-pill-wrap">
+          <select id="model" class="model-pill"></select>
+        </div>
+        <button class="meta-btn" onclick="newChat()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>New</span>
+        </button>
+        <button class="meta-btn meta-danger" onclick="clearConversation()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14H6L5 6"/>
+          </svg>
+          <span>Clear</span>
+        </button>
+        <div class="memory-pill" id="memory-pill">
+          <span>🧠</span><span id="memory-count">0</span> learned
+        </div>
+        <div class="autosave-pill" id="autosave-pill" style="display:none">
+          <span class="autosave-dot"></span> Auto-saved
+        </div>
+      </div>
+
+      <div id="error-box" class="error-box hidden"></div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
